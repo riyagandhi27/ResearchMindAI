@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ResearchMind AI</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <h1>ResearchMind AI</h1>
+    <p class="subtitle">Intelligent Research Assistant</p>
+
+    <div class="main-layout">
+
+        <!-- LEFT SIDE -->
+        <div class="left-panel">
+
+            <!-- CURRENT DOCUMENT -->
+            <div class="card active-doc-card">
+
+                {% if current_file %}
+
+                    <div class="doc-icon">📄</div>
+
+                    <div>
+                        <strong>{{ current_file }}</strong>
+                        <div class="status">✅ Active Document</div>
+                    </div>
+
+                {% else %}
+
+                    <div class="doc-icon">📭</div>
+
+                    <div>
+                        <strong>No document uploaded</strong>
+                        <div class="status">Upload a PDF, CSV, or website</div>
+                    </div>
+
+                {% endif %}
+
+            </div>
+
+            <div class="card">
+                <h2>📄 Upload PDF</h2>
+
+                <form action="/upload_pdf" method="POST" enctype="multipart/form-data">
+                    <input type="file" name="file" accept=".pdf" required>
+                    <button type="submit">Upload PDF</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>📊 Upload CSV</h2>
+
+                <form action="/upload_csv" method="POST" enctype="multipart/form-data">
+                    <input type="file" name="file" accept=".csv" required>
+                    <button type="submit">Upload CSV</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>🌐 Scrape Website</h2>
+
+                <form action="/upload_url" method="POST">
+                    <input type="text" name="url" placeholder="Enter Website URL" required>
+                    <button type="submit">Scrape Website</button>
+                </form>
+            </div>
+
+        </div>
+
+        <!-- RIGHT SIDE -->
+        <div class="right-panel">
+
+            <div class="chat-card">
+                <h2>💬 Ask ResearchMind</h2>
+
+                <div id="chat-box"></div>
+
+                <div class="chat-input-area">
+                    <textarea
+                        id="question-input"
+                        rows="3"
+                        placeholder="Ask your research question"
+                        required
+                    ></textarea>
+
+                    <button type="button" onclick="sendQuestion()">
+                        Ask AI
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+function escapeHTML(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+}
+    
+function formatAnswer(text) {
+    let safeText = escapeHTML(text);
+    
+    safeText = safeText.replace(
+        /\[CITATION (\d+)\]/g,
+        '<span class="citation-badge">Citation $1</span>'
+    );
+    
+    return safeText;
+}
+    
+async function sendQuestion() {
+    
+    const input = document.getElementById("question-input");
+    const question = input.value.trim();
+    
+    if (!question) return;
+    
+    const chatBox = document.getElementById("chat-box");
+    
+    const userDiv = document.createElement("div");
+    userDiv.className = "user-message";
+    userDiv.textContent = question;
+    chatBox.appendChild(userDiv);
+    
+    input.value = "";
+    
+    const botDiv = document.createElement("div");
+    botDiv.className = "bot-message";
+    botDiv.textContent = "ResearchMind AI is thinking...";
+    chatBox.appendChild(botDiv);
+    
+    chatBox.scrollTop = chatBox.scrollHeight;
+    
+    const response = await fetch("/chat_stream", {
+        method: "POST",
+        body: new URLSearchParams({
+            question: question
+        })
+    });
+    
+    if (!response.ok) {
+        botDiv.textContent = "Please upload a document first, then ask a question.";
+        return;
+    }
+    
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    
+    let answer = "";
+    
+    while (true) {
+        const { value, done } = await reader.read();
+    
+        if (done) break;
+    
+        answer += decoder.decode(value, { stream: true });
+    
+        botDiv.innerHTML = formatAnswer(answer);
+    
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+}
+</script>
+
+</body>
+</html>

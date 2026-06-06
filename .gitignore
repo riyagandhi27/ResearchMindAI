@@ -1,0 +1,13 @@
+venv/
+__pycache__/
+*.pyc
+
+.env
+
+uploads/
+vector_store/
+
+database/
+instance/
+
+*.db
