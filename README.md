@@ -1,4 +1,13 @@
-# ResearchMindAI
+
+---
+title: ResearchMind AI
+emoji: 🧠
+colorFrom: beige
+colorTo: brown
+sdk: docker
+app_port: 7860
+pinned: false
+---# ResearchMindAI
 # 🧠 ResearchMind AI
 
 > Intelligent Research Assistant powered by Retrieval-Augmented Generation (RAG), Semantic Search, FAISS, and Groq LLMs.
