@@ -159,6 +159,13 @@ def upload_pdf():
     if not clean_text or len(clean_text.strip()) < 10:
         return "No readable content found in PDF.", 400
 
+    # Clear previous documents
+    Document.query.delete()
+    db.session.commit()
+
+    # Clear FAISS memory
+    reset_rag()
+
     new_doc = Document(
         filename=filename,
         filetype="pdf",
@@ -212,6 +219,13 @@ def upload_csv():
     if not clean_text or len(clean_text.strip()) < 10:
         return "CSV has no usable content.", 400
 
+    # Clear previous documents
+    Document.query.delete()
+    db.session.commit()
+
+    # Clear FAISS memory
+    reset_rag()
+
     new_doc = Document(
         filename=filename,
         filetype="csv",
@@ -256,6 +270,13 @@ def upload_url():
     if not clean_text or len(clean_text.strip()) < 10:
         return "No readable web content found.", 400
 
+    # Clear previous documents
+    Document.query.delete()
+    db.session.commit()
+
+    # Clear FAISS memory
+    reset_rag()
+    
     new_doc = Document(
         filename=url,
         filetype="web",
@@ -286,15 +307,15 @@ def chat_stream():
     if not question or not question.strip():
         return "Question required.", 400
 
-    latest_doc = get_latest_document()
+    doc = Document.query.first()
 
-    if not latest_doc:
+    if not doc:
         return "No document uploaded.", 400
 
-    set_active_document(latest_doc)
-    rebuild_rag_from_document(latest_doc)
+    doc_id = str(doc.id)
 
-    doc_id = str(latest_doc.id)
+    set_active_document(doc)
+    rebuild_rag_from_document(doc)
 
     def generate():
 
