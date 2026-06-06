@@ -66,7 +66,14 @@ def index():
 
     get_session_id()
 
-    current_file = active_doc["filename"]
+    latest_doc = Document.query.order_by(Document.id.desc()).first()
+
+    current_file = latest_doc.filename if latest_doc else None
+
+    if latest_doc:
+        active_doc["doc_id"] = str(latest_doc.id)
+        active_doc["filename"] = latest_doc.filename
+
     return render_template(
         "index.html",
         current_file=current_file
@@ -261,7 +268,23 @@ def chat_stream():
 
     get_session_id()
 
-    doc_id = active_doc.get("doc_id")
+    latest_doc = Document.query.order_by(Document.id.desc()).first()
+
+    if not latest_doc:
+        return "No document uploaded", 400
+
+    doc_id = str(latest_doc.id)
+
+    active_doc["doc_id"] = doc_id
+    active_doc["filename"] = latest_doc.filename
+
+    reset_rag()
+
+    rag_service.index_document(
+        latest_doc.content,
+        doc_id=doc_id,
+        source_name=latest_doc.filename
+    )
 
     # Hugging Face fallback: recover latest uploaded document
     if not doc_id:
