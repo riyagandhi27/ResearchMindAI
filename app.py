@@ -27,6 +27,11 @@ db.init_app(app)
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+DATABASE_FOLDER = "database"
+os.makedirs(DATABASE_FOLDER, exist_ok=True)
+
+VECTOR_FOLDER = "vector_store"
+os.makedirs(VECTOR_FOLDER, exist_ok=True)
 
 # =========================
 # GLOBAL RAG INSTANCE
