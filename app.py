@@ -24,9 +24,15 @@ app.secret_key = "super-secret-key"
 
 db.init_app(app)
 
-UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+DATABASE_FOLDER = os.path.join(BASE_DIR, "database")
+VECTOR_FOLDER = os.path.join(BASE_DIR, "vector_store")
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(DATABASE_FOLDER, exist_ok=True)
+os.makedirs(VECTOR_FOLDER, exist_ok=True)
 DATABASE_FOLDER = "database"
 os.makedirs(DATABASE_FOLDER, exist_ok=True)
 
