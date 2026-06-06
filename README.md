@@ -1,6 +1,6 @@
 
 ---
-title: ResearchMind AI
+title: ResearchMindAI
 emoji: 🧠
 colorFrom: beige
 colorTo: brown
