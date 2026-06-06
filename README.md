@@ -1,8 +1,8 @@
 ---
 title: ResearchMindAI
 emoji: 🧠
-colorFrom: beige
-colorTo: brown
+colorFrom: gray
+colorTo: pink
 sdk: docker
 app_port: 7860
 pinned: false
