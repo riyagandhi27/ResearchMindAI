@@ -141,9 +141,7 @@ def upload_pdf():
         source_name=file.filename
     )
 
-    session["current_doc_id"] = doc_id
-    session["current_filename"] = file.filename
-
+    
     return redirect(url_for("index"))
 
 
@@ -258,15 +256,38 @@ def chat_stream():
 
     question = request.form.get("question")
 
-    if not question:
+    if not question or not question.strip():
         return "Question required", 400
 
     get_session_id()
 
-    doc_id = session.get("current_doc_id")
+    doc_id = active_doc.get("doc_id")
 
+    # Hugging Face fallback: recover latest uploaded document
     if not doc_id:
-        return "No document uploaded", 400
+        latest_doc = Document.query.order_by(Document.id.desc()).first()
+
+        if not latest_doc:
+            return "No document uploaded", 400
+
+        doc_id = str(latest_doc.id)
+
+        active_doc["doc_id"] = doc_id
+        active_doc["filename"] = latest_doc.filename
+
+        session["current_doc_id"] = doc_id
+        session["current_filename"] = latest_doc.filename
+
+        # Rebuild FAISS in case deployment memory was reset
+        reset_rag()
+
+        rag_service.index_document(
+            latest_doc.content,
+            doc_id=doc_id,
+            source_name=latest_doc.filename
+        )
+
+        print(f"[APP] Recovered active document: {latest_doc.filename} | doc_id={doc_id}")
 
     def generate():
 
@@ -295,7 +316,7 @@ def chat_stream():
                 db.session.commit()
 
             except Exception as e:
-                print("Chat history save error:", e)
+                print("[APP] Chat history save error:", e)
 
     return Response(
         stream_with_context(generate()),
