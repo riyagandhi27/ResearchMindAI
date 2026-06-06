@@ -1,11 +1,19 @@
 import os
 import uuid
 
-from flask import Flask, render_template, request, redirect, url_for, session, Response, stream_with_context
+from flask import (
+    Flask,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    session,
+    Response,
+    stream_with_context
+)
 
 from config import Config
 from extensions import db
-
 from models import Document, ChatHistory
 
 from services.pdf_service import PDFProcessor
@@ -20,9 +28,14 @@ from services.rag_service import RAGService
 
 app = Flask(__name__)
 app.config.from_object(Config)
-app.secret_key = "super-secret-key"
+app.secret_key = os.getenv("SECRET_KEY", "researchmind-secret")
 
 db.init_app(app)
+
+
+# =========================
+# RUNTIME FOLDERS
+# =========================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -33,11 +46,7 @@ VECTOR_FOLDER = os.path.join(BASE_DIR, "vector_store")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(DATABASE_FOLDER, exist_ok=True)
 os.makedirs(VECTOR_FOLDER, exist_ok=True)
-DATABASE_FOLDER = "database"
-os.makedirs(DATABASE_FOLDER, exist_ok=True)
 
-VECTOR_FOLDER = "vector_store"
-os.makedirs(VECTOR_FOLDER, exist_ok=True)
 
 # =========================
 # GLOBAL RAG INSTANCE
@@ -45,16 +54,39 @@ os.makedirs(VECTOR_FOLDER, exist_ok=True)
 
 rag_service = RAGService()
 
-active_doc = {
-    "doc_id": None,
-    "filename": None
-}
+
+# =========================
+# HELPERS
+# =========================
 
 def get_session_id():
     if "session_id" not in session:
         session["session_id"] = str(uuid.uuid4())
 
     return session["session_id"]
+
+
+def reset_rag():
+    rag_service.reset()
+
+
+def set_active_document(doc):
+    session["current_doc_id"] = str(doc.id)
+    session["current_filename"] = doc.filename
+
+
+def get_latest_document():
+    return Document.query.order_by(Document.id.desc()).first()
+
+
+def rebuild_rag_from_document(doc):
+    reset_rag()
+
+    rag_service.index_document(
+        doc.content,
+        doc_id=str(doc.id),
+        source_name=doc.filename
+    )
 
 
 # =========================
@@ -66,27 +98,17 @@ def index():
 
     get_session_id()
 
-    latest_doc = Document.query.order_by(Document.id.desc()).first()
+    latest_doc = get_latest_document()
 
     current_file = latest_doc.filename if latest_doc else None
 
     if latest_doc:
-        active_doc["doc_id"] = str(latest_doc.id)
-        active_doc["filename"] = latest_doc.filename
+        set_active_document(latest_doc)
 
     return render_template(
         "index.html",
         current_file=current_file
     )
-
-
-# =========================
-# RESET RAG
-# =========================
-
-def reset_rag():
-    rag_service.reset()
-    session.pop("current_doc_id", None)
 
 
 # =========================
@@ -98,8 +120,8 @@ def clear_document():
 
     reset_rag()
 
-    active_doc["filename"] = None
-    active_doc["doc_id"] = None
+    session.pop("current_doc_id", None)
+    session.pop("current_filename", None)
 
     return redirect(url_for("index"))
 
@@ -111,12 +133,21 @@ def clear_document():
 @app.route("/upload_pdf", methods=["POST"])
 def upload_pdf():
 
-    file = request.files.get("file")
+    print("[UPLOAD PDF] request.files keys:", list(request.files.keys()))
+    print("[UPLOAD PDF] request.form keys:", list(request.form.keys()))
 
-    if not file:
-        return "No file uploaded", 400
+    file = (
+        request.files.get("file")
+        or request.files.get("pdf_file")
+        or request.files.get("document")
+    )
 
-    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
+    if not file or file.filename == "":
+        print("[UPLOAD PDF] No file received.")
+        return "No file uploaded. Please choose a PDF file first.", 400
+
+    filename = file.filename
+    file_path = os.path.join(UPLOAD_FOLDER, filename)
     file.save(file_path)
 
     pdf_processor = PDFProcessor()
@@ -126,10 +157,10 @@ def upload_pdf():
     clean_text = cleaner.clean(raw_text)
 
     if not clean_text or len(clean_text.strip()) < 10:
-        return "No readable content", 400
+        return "No readable content found in PDF.", 400
 
     new_doc = Document(
-        filename=file.filename,
+        filename=filename,
         filetype="pdf",
         source="pdf",
         content=clean_text
@@ -138,17 +169,11 @@ def upload_pdf():
     db.session.add(new_doc)
     db.session.commit()
 
-    reset_rag()
+    set_active_document(new_doc)
+    rebuild_rag_from_document(new_doc)
 
-    doc_id = str(new_doc.id)
+    print(f"[UPLOAD PDF] Uploaded successfully: {filename} | doc_id={new_doc.id}")
 
-    rag_service.index_document(
-        clean_text,
-        doc_id=doc_id,
-        source_name=file.filename
-    )
-
-    
     return redirect(url_for("index"))
 
 
@@ -159,12 +184,21 @@ def upload_pdf():
 @app.route("/upload_csv", methods=["POST"])
 def upload_csv():
 
-    file = request.files.get("file")
+    print("[UPLOAD CSV] request.files keys:", list(request.files.keys()))
+    print("[UPLOAD CSV] request.form keys:", list(request.form.keys()))
 
-    if not file:
-        return "No file uploaded", 400
+    file = (
+        request.files.get("file")
+        or request.files.get("csv_file")
+        or request.files.get("document")
+    )
 
-    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
+    if not file or file.filename == "":
+        print("[UPLOAD CSV] No file received.")
+        return "No file uploaded. Please choose a CSV file first.", 400
+
+    filename = file.filename
+    file_path = os.path.join(UPLOAD_FOLDER, filename)
     file.save(file_path)
 
     import pandas as pd
@@ -176,10 +210,10 @@ def upload_csv():
     clean_text = cleaner.clean(csv_text)
 
     if not clean_text or len(clean_text.strip()) < 10:
-        return "CSV has no usable content", 400
+        return "CSV has no usable content.", 400
 
     new_doc = Document(
-        filename=file.filename,
+        filename=filename,
         filetype="csv",
         source="csv",
         content=clean_text
@@ -188,18 +222,10 @@ def upload_csv():
     db.session.add(new_doc)
     db.session.commit()
 
-    reset_rag()
+    set_active_document(new_doc)
+    rebuild_rag_from_document(new_doc)
 
-    doc_id = str(new_doc.id)
-
-    rag_service.index_document(
-        clean_text,
-        doc_id=doc_id,
-        source_name=file.filename
-    )
-
-    session["current_doc_id"] = doc_id
-    session["current_filename"] = file.filename
+    print(f"[UPLOAD CSV] Uploaded successfully: {filename} | doc_id={new_doc.id}")
 
     return redirect(url_for("index"))
 
@@ -214,19 +240,21 @@ def upload_url():
     url = request.form.get("url")
 
     if not url or len(url.strip()) < 5:
-        return "Invalid URL", 400
+        return "Invalid URL.", 400
+
+    url = url.strip()
 
     scraper = WebScraper()
     raw_text = scraper.extract_text(url)
 
     if not raw_text:
-        return "Failed to extract content", 400
+        return "Failed to extract content from URL.", 400
 
     cleaner = TextCleaner()
     clean_text = cleaner.clean(raw_text)
 
     if not clean_text or len(clean_text.strip()) < 10:
-        return "No readable web content", 400
+        return "No readable web content found.", 400
 
     new_doc = Document(
         filename=url,
@@ -238,18 +266,10 @@ def upload_url():
     db.session.add(new_doc)
     db.session.commit()
 
-    reset_rag()
+    set_active_document(new_doc)
+    rebuild_rag_from_document(new_doc)
 
-    doc_id = str(new_doc.id)
-
-    rag_service.index_document(
-        clean_text,
-        doc_id=doc_id,
-        source_name=url
-    )
-
-    session["current_doc_id"] = doc_id
-    session["current_filename"] = url
+    print(f"[UPLOAD URL] Uploaded successfully: {url} | doc_id={new_doc.id}")
 
     return redirect(url_for("index"))
 
@@ -264,53 +284,17 @@ def chat_stream():
     question = request.form.get("question")
 
     if not question or not question.strip():
-        return "Question required", 400
+        return "Question required.", 400
 
-    get_session_id()
-
-    latest_doc = Document.query.order_by(Document.id.desc()).first()
+    latest_doc = get_latest_document()
 
     if not latest_doc:
-        return "No document uploaded", 400
+        return "No document uploaded.", 400
+
+    set_active_document(latest_doc)
+    rebuild_rag_from_document(latest_doc)
 
     doc_id = str(latest_doc.id)
-
-    active_doc["doc_id"] = doc_id
-    active_doc["filename"] = latest_doc.filename
-
-    reset_rag()
-
-    rag_service.index_document(
-        latest_doc.content,
-        doc_id=doc_id,
-        source_name=latest_doc.filename
-    )
-
-    # Hugging Face fallback: recover latest uploaded document
-    if not doc_id:
-        latest_doc = Document.query.order_by(Document.id.desc()).first()
-
-        if not latest_doc:
-            return "No document uploaded", 400
-
-        doc_id = str(latest_doc.id)
-
-        active_doc["doc_id"] = doc_id
-        active_doc["filename"] = latest_doc.filename
-
-        session["current_doc_id"] = doc_id
-        session["current_filename"] = latest_doc.filename
-
-        # Rebuild FAISS in case deployment memory was reset
-        reset_rag()
-
-        rag_service.index_document(
-            latest_doc.content,
-            doc_id=doc_id,
-            source_name=latest_doc.filename
-        )
-
-        print(f"[APP] Recovered active document: {latest_doc.filename} | doc_id={doc_id}")
 
     def generate():
 
