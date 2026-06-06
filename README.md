@@ -16,6 +16,15 @@ ResearchMind AI allows users to upload PDFs, CSV files, and website URLs, then i
 
 ---
 
+# 📄Project Demo
+
+👉https://huggingface.co/spaces/riyagandhi27/ResearchMindAI
+
+An AI-powered research assistant for exploring your own knowledge sources.
+Chat with PDFs, datasets, and websites using semantic retrieval and LLM reasoning.
+
+---
+
 # ✨ Features
 
 ## 📄 Document Processing
