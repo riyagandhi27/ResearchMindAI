@@ -45,6 +45,10 @@ os.makedirs(VECTOR_FOLDER, exist_ok=True)
 
 rag_service = RAGService()
 
+active_doc = {
+    "doc_id": None,
+    "filename": None
+}
 
 def get_session_id():
     if "session_id" not in session:
@@ -62,8 +66,7 @@ def index():
 
     get_session_id()
 
-    current_file = session.get("current_filename")
-
+    current_file = active_doc["filename"]
     return render_template(
         "index.html",
         current_file=current_file
@@ -88,7 +91,8 @@ def clear_document():
 
     reset_rag()
 
-    session.pop("current_filename", None)
+    active_doc["filename"] = None
+    active_doc["doc_id"] = None
 
     return redirect(url_for("index"))
 
